@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Gestión de Estacionamiento Inteligente</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet" />
+    <!-- ExcelJS Library -->
+    <script src="https://unpkg.com/exceljs/dist/exceljs.min.js"></script>
+</head>
+
+<body>
+    <!-- Clock Section -->
+    <div style="position: fixed; top: 10px; right: 10px; border: 1px solid #000; padding: 5px; background-color: #fff; z-index: 999;">
+        <div id="clock" style="font-size: 18px;"></div>
+    </div>
+
+    <!-- Header Section -->
+    <header class="bg-dark text-white text-center p-4">
+        <h1>Gestión de Estacionamiento Inteligente</h1>
+        <p>Registra patentes, horas de entrada/salida y calcula costos automáticamente</p>
+    </header>
+    <!-- Parking Form -->
+    <section class="container mt-5" id="parking-form">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <h2>Registro de Estacionamiento</h2>
+                <form id="parkingForm">
+                    <div class="form-group">
+                        <label for="patent">Patente:</label>
+                        <input class="form-control" id="patent" placeholder="Ingrese la patente" required="" type="text" oninput="this.value = this.value.toUpperCase()" />
+                    </div>
+                    <!-- Invertimos los campos de entrada y salida -->
+                    <div class="form-group">
+                        <label for="exitTime">Hora de Entrada:</label>
+                        <input class="form-control" id="exitTime" required="" type="time" />
+                    </div>
+                    <div class="form-group">
+                        <label for="entryTime">Hora de Salida:</label>
+                        <input class="form-control" id="entryTime" required="" type="time" />
+                    </div>
+                    <!-- Tarifa por hora fija en 1000 CLP y deshabilitada -->
+                    <div class="form-group">
+                        <label for="tarifaPorHora">Tarifa por Hora (CLP):</label>
+                        <input class="form-control" id="tarifaPorHora" value="1000" disabled />
+                    </div>
+                    <button class="btn btn-primary w-100" type="submit">Calcular Costo</button>
+                </form>
+            </div>
+        </div>
+    </section>
+    <!-- Cost Calculation Section -->
+    <section class="container mt-5" id="cost-calculation">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <h2>Costo de Estacionamiento</h2>
+                <div class="text-center" id="costResult"></div>
+            </div>
+        </div>
+    </section>
+    <!-- Parking Records Section -->
+    <section class="container mt-5" id="parking-records">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <h2>Registros de Estacionamiento</h2>
+                <table class="table table-striped" id="parkingRecordsTable">
+                    <thead>
+                        <tr>
+                            <th>Patente</th>
+                            <th>Hora de Entrada</th>
+                            <th>Hora de Salida</th>
+                            <th>Costo</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Parking records will be dynamically added here -->
+                    </tbody>
+                </table>
+                <button class="btn btn-primary w-100" id="downloadReportBtn">Descargar Informe</button>
+            </div>
+        </div>
+    </section>
+    <!-- Bootstrap & jQuery JS -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script nonce="u6jvbCTI" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.4/jquery.min.js"></script>
+    <script nonce="u6jvbCTI" src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.1/js/bootstrap.min.js"></script>
+    <script>
+        (function() {
+            window.onload = function() {
+                parent.iframeLoaded();
+            }
+        })();
+
+        // Función para actualizar la hora de entrada automáticamente cada segundo
+        function updateEntryTime() {
+            let entryTimeField = document.getElementById('entryTime');
+            let currentDateTime = new Date();
+            let hours = currentDateTime.getHours().toString().padStart(2, '0');
+            let minutes = currentDateTime.getMinutes().toString().padStart(2, '0');
+            entryTimeField.value = `${hours}:${minutes}`;
+        }
+
+        // Actualiza la hora de entrada cada segundo
+        setInterval(updateEntryTime, 1000);
+
+        // Función para actualizar el reloj
+        function updateClock() {
+            const clock = document.getElementById('clock');
+            const now = new Date();
+            const hours = now.getHours().toString().padStart(2, '0');
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            const seconds = now.getSeconds().toString().padStart(2, '0');
+            clock.textContent = `${hours}:${minutes}:${seconds}`;
+        }
+
+        // Actualiza el reloj cada segundo
+        setInterval(updateClock, 1000);
+
+        try {
+            $(document).ready(function() {
+                // Parking records array
+                let parkingRecords = [];
+
+                // Parking form submission
+                $('#parkingForm').submit(function(e) {
+                    e.preventDefault();
+
+                    // Get form values
+                    let patent = $('#patent').val().toUpperCase(); // Convertir a mayúsculas
+                    let entryTime = $('#entryTime').val();
+                    let exitTime = $('#exitTime').val();
+                    let tarifaPorHora = 1000; // Tarifa por hora fija en 1000 CLP
+
+                    // Calculate cost based on the hourly rate and time elapsed
+                    let cost = calculateCost(entryTime, exitTime, tarifaPorHora);
+
+                    // Create parking record object
+                    let parkingRecord = {
+                        patent: patent,
+                        entryTime: entryTime,
+                        exitTime: exitTime,
+                        cost: cost
+                    };
+
+                    // Add parking record to array
+                    parkingRecords.push(parkingRecord);
+
+                    // Clear form inputs
+                    $('#patent').val('');
+                    $('#entryTime').val('');
+                    $('#exitTime').val('');
+
+                    // Update parking records table
+                    updateParkingRecordsTable();
+
+                    // Display cost result
+                    $('#costResult').html(`<p>El costo de estacionamiento es: ${cost.toFixed(2)} CLP</p>`);
+                });
+
+                // Download report button click
+                $('#downloadReportBtn').click(function() {
+                    // Create workbook
+                    let workbook = new ExcelJS.Workbook();
+
+                    // Add worksheet
+                    let worksheet = workbook.addWorksheet('Parking Records');
+
+                    // Add headers
+                    worksheet.addRow(['Patente', 'Hora de Entrada', 'Hora de Salida', 'Costo']);
+
+                    // Add data rows
+                    parkingRecords.forEach(record => {
+                        worksheet.addRow([record.patent, record.entryTime, record.exitTime, record.cost.toFixed(2)]);
+                    });
+
+                    // Set column widths
+                    worksheet.getColumn(1).width = 15;
+                    worksheet.getColumn(2).width = 15;
+                    worksheet.getColumn(3).width = 15;
+                    worksheet.getColumn(4).width = 10;
+
+                    // Generate buffer from workbook
+                    workbook.xlsx.writeBuffer().then(function(buffer) {
+                        // Create blob from buffer
+                        let blob = new Blob([buffer], {
+                            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                        });
+
+                        // Create download link
+                        let link = document.createElement('a');
+                        link.href = window.URL.createObjectURL(blob);
+                        link.download = 'parking_records.xlsx';
+                        link.click();
+                    });
+                });
+
+
+                // Function to calculate parking cost based on hourly rate and time elapsed
+                function calculateCost(entryTime, exitTime, tarifaPorHora) {
+                    let entryHour = parseInt(entryTime.split(':')[0]);
+                    let entryMinute = parseInt(entryTime.split(':')[1]);
+                    let exitHour = parseInt(exitTime.split(':')[0]);
+                    let exitMinute = parseInt(exitTime.split(':')[1]);
+
+                    let entryTotalMinutes = entryHour * 60 + entryMinute;
+                    let exitTotalMinutes = exitHour * 60 + exitMinute;
+                    let totalMinutes = exitTotalMinutes - entryTotalMinutes;
+
+                    // Calculate the cost based on the hourly rate and time elapsed
+                    let costo = (totalMinutes / 60) * tarifaPorHora;
+
+                    return costo;
+                }
+
+                // Function to update parking records table
+                function updateParkingRecordsTable() {
+                    let tableBody = $('#parkingRecordsTable tbody');
+                    tableBody.empty();
+
+                    parkingRecords.forEach(record => {
+                        let row = `<tr>
+                                    <td>${record.patent}</td>
+                                    <td>${record.entryTime}</td>
+                                    <td>${record.exitTime}</td>
+                                    <td>${record.cost.toFixed(2)} CLP</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-danger delete-record" data-patent="${record.patent}">Eliminar</button>
+                                    </td>
+                                    </tr>`;
+                        tableBody.append(row);
+                    });
+
+                    // Delete record button click
+                    $('.delete-record').click(function() {
+                        let patent = $(this).data('patent');
+                        deleteParkingRecord(patent);
+                    });
+                }
+
+                // Function to delete parking record
+                function deleteParkingRecord(patent) {
+                    parkingRecords = parkingRecords.filter(record => record.patent !== patent);
+                    updateParkingRecordsTable();
+                }
+            });
+        } catch (e) {
+            console.log("Error in JS code", e);
+        }
+    </script>
+</body>
+
+</html>
